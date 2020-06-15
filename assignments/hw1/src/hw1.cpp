@@ -1,4 +1,5 @@
 #include <iostream>
+#include <stdio.h>
 #include <omp.h>
 #include <cmath>
 #include "hw1.h"
@@ -12,14 +13,16 @@ double euclidean_length(std::vector<double> vector) {
   }
 
   int i;
+  int chunk = n/2;
   double sum = 0.0;
   double result = 0.0;
 
 
-#pragma opm parallel for reduction(+:sum) // shared(sum, vector) private(i)
+#pragma opm parallel for default(shared) private(i) schedule(static,chunk) reduction(+:sum)
   for(i=0; i<n; i++){
-    //std::cout << "Number of threads: " << omp_get_thread_num() << std::endl;
     sum += vector[i]*vector[i];
+
+    //std::cout << "Number of threads: " << omp_get_thread_num() << std::endl;
   }
 
   result=sqrt(sum);
