@@ -30,11 +30,12 @@ double euclidean_length(std::vector<double> vector) {
   }
 
   int i;
-  int chunk = n/2;
+  int chunk = 1;
   double sum = 0.0;
   double result = 0.0;
 
-#pragma opm parallel for default(shared) private(i) schedule(static,chunk) reduction(+:sum)
+#pragma omp parallel for default(shared) private(i) schedule(static, chunk) \
+reduction(+:sum)
   for(i=0; i<n; i++){
     sum += vector[i]*vector[i];
 
@@ -48,6 +49,7 @@ double euclidean_length(std::vector<double> vector) {
 
   return result;
 }
+
 std::vector<int64_t> discard_duplicates(std::vector<int64_t> sorted_vector) {
   // Your code goes here
 
