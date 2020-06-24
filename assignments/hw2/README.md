@@ -4,8 +4,8 @@ These instructions and code files are just meant to get you started. You can
 use these or roll your own. However the zip file must contain a `hw2.go` file
 which contains a golang implementation of the following two functions:
 
-`func BellmanFord(s graph.Node, g graph.Graph) path.Shortest`
-`func DeltaStep(s graph.Node, g graph.Graph) path.Shortest`
+* `func BellmanFord(s graph.Node, g graph.Graph) Shortest`
+* `func DeltaStep(s graph.Node, g graph.Graph) Shortest`
 
 This assignemnt makes use of the library: https://github.com/gonum/graph
 See the license here: https://github.com/gonum/license
@@ -33,3 +33,8 @@ with: `go test`
 ## Testing with bigger/different graphs
 
 `gonum` has packages for graph generation and includes many test graphs.
+
+## Hints
+
+This starter code includes an implementation of the Dijkstra shortest paths
+algorithm, that you can use to test your own.

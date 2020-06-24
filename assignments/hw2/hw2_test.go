@@ -2,7 +2,6 @@ package hw2
 
 import (
 	"github.com/gonum/graph"
-	"github.com/gonum/graph/path"
 	"math"
 	"reflect"
 	"testing"
@@ -16,11 +15,11 @@ func Test(t *testing.T) {
 		}
 
 		var (
-			pt path.Shortest
+			pt Shortest
 
 			panicked bool
 		)
-		flist := []func(graph.Node, graph.Graph) path.Shortest{Dijkstra, BellmanFord, DeltaStep}
+		flist := []func(graph.Node, graph.Graph) Shortest{Dijkstra, BellmanFord, DeltaStep}
 
 		for _, f := range flist {
 			func() {
