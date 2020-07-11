@@ -23,7 +23,7 @@ func BellmanFord(s graph.Node, g graph.Graph) Shortest {
 // for the concurrency model you chose.
 func DeltaStep(s graph.Node, g graph.Graph) Shortest {
 	// Your code goes here.
-	return newShortestFrom(s, g.Nodes())
+	return DeltaStepFrom(s, g)
 }
 
 // Runs dijkstra from gonum to make sure that the tests are correct.
