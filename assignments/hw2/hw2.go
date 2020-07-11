@@ -12,7 +12,7 @@ import (
 // for the concurrency model you chose.
 func BellmanFord(s graph.Node, g graph.Graph) Shortest {
 	// Your code goes here.
-	return newShortestFrom(s, g.Nodes())
+	return BellmanFordImplChannel(s, g)
 }
 
 // Apply the delta-stepping algorihtm to Graph and return
