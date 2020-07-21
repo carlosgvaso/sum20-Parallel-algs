@@ -1,0 +1,10 @@
+// Homework 3 gitignore
+
+// Ignore everything except the whitelisted files
+*
+!.gitignore
+!README.txt
+!inp.txt
+!q1.cu
+!q2.cu
+
