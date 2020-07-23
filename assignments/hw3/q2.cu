@@ -36,7 +36,7 @@ std::vector<int> read_input (std::string filename) {
 	std::ifstream fin(filename);
 
 	// Make sure the file is open
-	if (!fin.is_open()) throw std::runtime_error("Q1:read_input: Could not open file");
+	if (!fin.is_open()) throw std::runtime_error("Q2:read_input: Could not open file");
 
 	// Helper vars
 	std::string line;
@@ -99,7 +99,7 @@ void write_output (std::string filename, std::vector<int> arr_out) {
 int main (int argc, char **argv) {
 	/* Test ===================================================================
 	 *
-	 * Read input and write to output 1a file
+	 * Read input and write to output to file
 	 */
 	std::vector<int> arr_in;
 
