@@ -1,0 +1,14 @@
+#!/bin/bash
+#SBATCH -J hw3q2		# job name
+#SBATCH -o hw3q2%j		# output and error file name (%j expands to jobID)
+#SBATCH -N 1			# total number of nodes
+#SBATCH -n 4			# total number of cores
+#SBATCH -p gtx			# queue (partition) -- normal, development, etc.
+#SBATCH -t 00:00:20		# run time (hh:mm:ss) - 20 seconds
+#SBATCH -A EE-382C-EE-361C-Mult
+#SBATCH --mail-user=user@email.com			# replace by your email
+#SBATCH --mail-type=begin					# email me when the job starts
+#SBATCH --mail-type=end						# email me when the job finishes
+./q2.out	# Compile as: $ nvcc -o q2.out q2.cu
+# Run batch as: $ sbatch q2-batch
+
