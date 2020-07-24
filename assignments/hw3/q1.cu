@@ -102,30 +102,30 @@ void write_output (std::string filename, std::vector<int> v_out) {
  */
 __global__ void arrayMinKernel(int *d_out, int *d_in)
 {
-    int myId = threadIdx.x + blockDim.x * blockIdx.x;
-    //int tid  = threadIdx.x;
+	int myId = threadIdx.x + blockDim.x * blockIdx.x;
+	//int tid  = threadIdx.x;
 
 	/* TODO: Implement Hillis-Steele parallel scan min
-    // do reduction in global mem
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1)
-    {
-        if (tid < s)
-        {
-            d_in[myId] += d_in[myId + s];
-        }
-        __syncthreads();        // make sure all adds at one stage are done!
-    }
+	// do reduction in global mem
+	for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1)
+	{
+		if (tid < s)
+		{
+			d_in[myId] += d_in[myId + s];
+		}
+		__syncthreads();        // make sure all adds at one stage are done!
+	}
 
-    // only thread 0 writes result for this block back to global mem
-    if (tid == 0)
-    {
-        d_out[blockIdx.x] = d_in[myId];
+	// only thread 0 writes result for this block back to global mem
+	if (tid == 0)
+	{
+		d_out[blockIdx.x] = d_in[myId];
 	}
 	*/
 	if (myId == 0)
-    {
-        d_out[0] = d_in[0];
-    }
+	{
+		d_out[0] = d_in[0];
+	}
 }
 
 /** Q1 a) Compute minA, the minimum value in the input array
@@ -145,17 +145,17 @@ void q1a (std::vector<int> v_in) {
 	//int *d_in, *d_intermediate, *d_out;
 	int *d_in, *d_out;
 
-    // Allocate GPU memory
-    cudaMalloc((void **) &d_in, v_in.size());
-    //cudaMalloc((void **) &d_intermediate, ARRAY_BYTES); // overallocated
-    cudaMalloc((void **) &d_out, sizeof(int));
+	// Allocate GPU memory
+	cudaMalloc((void **) &d_in, v_in.size());
+	//cudaMalloc((void **) &d_intermediate, ARRAY_BYTES); // overallocated
+	cudaMalloc((void **) &d_out, sizeof(int));
 
 	/* Transfer the input array to the GPU
 	 * Since the elements of a vector are stored contiguously in memory, we can
 	 * pass a pointer to the first element of the vector, and that will act as
 	 * if we passed a C array.
 	 */
-    cudaMemcpy(d_in, &v_in[0], v_in.size(), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_in, &v_in[0], v_in.size(), cudaMemcpyHostToDevice);
 
 	/* TODO: Calculate the number of blocks and threads to use
 	 *
@@ -165,12 +165,12 @@ void q1a (std::vector<int> v_in) {
 	 */
 	const int maxThreadsPerBlock = 512;
 	int threads = maxThreadsPerBlock;
-    int blocks = v_in.size() / maxThreadsPerBlock;
+	int blocks = v_in.size() / maxThreadsPerBlock;
 
 	#if DEBUG
 	// Set up a timer to measure the elapsed time to find the min
 	cudaEvent_t start, stop;
-    cudaEventCreate(&start);
+	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 	
 	printf("\tFinding minimum entry in the array...\n");
@@ -186,13 +186,13 @@ void q1a (std::vector<int> v_in) {
 	cudaEventSynchronize(stop);
 
 	// Calculate elapsed time, and print it
-    float elapsedTime;
+	float elapsedTime;
 	cudaEventElapsedTime(&elapsedTime, start, stop);
 	printf("\tAverage time elapsed: %f\n", elapsedTime);
 	#endif
 
 	// Copy back the min result from GPU
-    int a_out;
+	int a_out;
 	cudaMemcpy(&a_out, d_out, sizeof(int), cudaMemcpyDeviceToHost);
 
 	#if DEBUG
