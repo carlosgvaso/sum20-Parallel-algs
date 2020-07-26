@@ -90,16 +90,47 @@
  }
  
  
- __global__ void unique_idx_calc_threadIdx(int* input, int* result)
+ __global__ void unique_idx_calc_threadIdx(int * input, int * d_B, int size)
  {
 	 //printf("result : %d \n",result[blockIdx.x]);
 	 int tid=threadIdx.x;
-	 int offset=blockIdx.x * blockDim.x;
+	 int blockid=blockIdx.x;
+	 int offset= blockid * blockDim.x;
 	 int gid=tid + offset;
-	 if(input[tid] != NULL){
-	 result[blockIdx.x]=1;
-	 }
-	 printf("blockIdx.x: %d, threadIdx: %d, gid: %d, value : %d, b: %d \n",blockIdx.x, tid, gid, input[tid], result[blockIdx.x]);
+	 if(gid<size){
+		 if(input[gid]>=0 && input[gid]<100){
+			 atomicAdd(&d_B[0],1);
+		 }
+		 if(input[gid]>=100 && input[gid]<200){
+			 atomicAdd(&d_B[1],1);
+		 }
+		 if(input[gid]>=200 && input[gid]<300){
+			 atomicAdd(&d_B[2],1);
+		 }
+		 if(input[gid]>=300 && input[gid]<400){
+			 atomicAdd(&d_B[3],1);
+		 }
+		 if(input[gid]>=400 && input[gid]<500){
+			 atomicAdd(&d_B[4],1);
+		 }
+		 if(input[gid]>=500 && input[gid]<600){
+			 atomicAdd(&d_B[5],1);
+		 }
+		 if(input[gid]>=600 && input[gid]<700){
+			 atomicAdd(&d_B[6],1);
+		 }
+		 if(input[gid]>=700 && input[gid]<800){
+			 atomicAdd(&d_B[7],1);
+		 }
+		 if(input[gid]>=800 && input[gid]<900){
+			 atomicAdd(&d_B[8],1);
+		 }
+		 if(input[gid]>=900 && input[gid]<1000){
+			 atomicAdd(&d_B[9],1);
+		 }
+	 }	
+	 __syncthreads();
+	 //
 	 
  }
  
@@ -110,36 +141,39 @@
   * \return	Program return code
   */
  int main (int argc, char **argv) {
-	 /* Test ===================================================================
-	  *
-	  * Read input and write to output to file
-	  */
+	 
 	 std::vector<int> arr_in;
-	 int* arr_input;
 	 arr_in = read_input(INPUT_FILE);
+	 int* arr_input;
 	 arr_input=arr_in.data();
-	 int size_arr;
-	 int size_B;
-	 size_B=10;
+	 int size_arr=arr_in.size();
+	 int size_B=10;
 	 int B[size_B];
-	 int* d_B;
-	 for (int i=0;i<size_B;i++){
-	 B[i]=0;
+	 int c=0;
+	 for(int i=0;i<size_arr;i++){
+		 if(arr_input[i]>=200 && arr_input[i]<300){
+			 c=c+1;
+		 }
 	 }
-	 size_arr=arr_in.size();
-	 printf("Size of array %d \n", arr_in.size());
-		 int *d_arr_in;
-	 cudaMalloc((void**)&d_arr_in,size_arr);
-	 cudaMemcpy(d_arr_in, arr_input, size_arr, cudaMemcpyHostToDevice);
-	 cudaMalloc((void**)&d_B,size_B);
-	 cudaMemcpy(d_B,B, size_B,cudaMemcpyHostToDevice);
-	 dim3 block(100);
-	 dim3 grid (10);
-	 unique_idx_calc_threadIdx<<<grid,block>>>(d_arr_in,d_B);
+	 printf("Values in the range 0-99 : %d \n", c);
+	 for(int i=0;i<size_B;i++){
+		 B[i]=0;
+	 }
+	 //Global variables
+	 int* d_B;
+	 int *d_arr_in;
+	 int size_arr_byte=sizeof(int) * size_arr;
+	 int size_B_byte=sizeof(int)*size_B;
+	 cudaMalloc((void**)&d_arr_in,size_arr_byte);
+	 cudaMemcpy(d_arr_in, arr_input, size_arr_byte, cudaMemcpyHostToDevice);
+	 cudaMalloc((void**)&d_B,size_B_byte);
+	 cudaMemcpy(d_B,B, size_B_byte,cudaMemcpyHostToDevice);
+	 dim3 block(32);
+	 dim3 grid (((size_arr/32)+1));
+	 unique_idx_calc_threadIdx<<<grid,block>>>(d_arr_in,d_B, size_arr);
 	 cudaDeviceSynchronize();
-	 
-	 cudaMemcpy(B,d_B,size_B,cudaMemcpyDeviceToHost);
-	 
+	 cudaMemcpy(&B,d_B,size_B_byte,cudaMemcpyDeviceToHost);
+	 printf("B array: \n");
 	 for(int i=0;i<size_B;i++){
 		 printf("%d \n", B[i]);
 	 }
