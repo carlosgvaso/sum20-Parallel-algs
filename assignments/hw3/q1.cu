@@ -15,7 +15,7 @@
 
 
 // Globals
-#define DEBUG 2	//! Enable debug messages (0: no messages, 1: some messages, 2: all messages)
+#define DEBUG 1	//! Enable debug messages (0: no messages, 1: some messages, 2: all messages)
 
 #define INPUT_FILE "inp.txt"		//! Input filename
 #define OUTPUT_FILE_Q1A "q1a.txt"	//! Q1 a output filename
@@ -114,12 +114,11 @@ __global__ void parallelScanMinKernel(int *d_out, int *d_in, int n)
 				   blockIdx.x, 0);
 			for (int i=0; i<n; ++i) {
 				if (i == n-1) {
-					printf("%d", d_in[i]);
+					printf("%d ]\n", d_in[i]);
 				} else {
 					printf("%d, ", d_in[i]);
 				}
 			}
-			printf(" ]\n");
 		}
 		#endif
 		
@@ -139,12 +138,11 @@ __global__ void parallelScanMinKernel(int *d_out, int *d_in, int n)
 				printf("\t\tBlock %d: d = %d: d_in = [ ", blockIdx.x, d);
 				for (int i=0; i<n; ++i) {
 					if (i == n-1) {
-						printf("%d", d_in[i]);
+						printf("%d ]\n", d_in[i]);
 					} else {
 						printf("%d, ", d_in[i]);
 					}
 				}
-				printf(" ]\n");
 			}
 			#endif
 		}
@@ -228,33 +226,41 @@ void q1a (const std::vector<int> &v_in, cudaDeviceProp *devProps) {
 	#if DEBUG
 	printf("\tThreads per block: %d\n", threads_per_block);
 	printf("\tBlocks per grid: %d\n", blocks_per_grid);
+	printf("\tRunning kernel...\n");
 	#endif
 
 	// Launch the kernel to find min
 	parallelScanMinKernel<<<blocks_per_grid, threads_per_block>>>
 		(d_intermediate, d_in, N);
+	
+	// Make sure all the blocks finish executing
+	cudaDeviceSynchronize();
+	cudaDeviceSynchronize();
 
 	// If there are more than one block, we need to repeat the process with their results
 	if (blocks_per_grid > 1) {
-		/*
 		#if DEBUG
 		// Copy array to host
 		int *a_out;
 		a_out = (int*) malloc(d_in_size);
-		cudaMemcpy(&a_out, &d_intermediate[0], d_in_size, cudaMemcpyDeviceToHost);
+		cudaMemcpy(a_out, d_intermediate, d_in_size, cudaMemcpyDeviceToHost);
 
 		printf("\tBlock results: d_intermediate = [ ");
 		for (int i=0; i<blocks_per_grid; ++i) {
 			if (i == blocks_per_grid-1) {
-				printf("%d", d_intermediate[i]);
+				printf("%d ]\n", a_out[i]);
 			} else {
-				printf("%d, ", d_intermediate[i]);
+				printf("%d, ", a_out[i]);
 			}
 		}
-		printf(" ]\n");
 		free(a_out);
 		#endif
-		*/
+
+		#if DEBUG
+		printf("\tThreads per block: %d\n", blocks_per_grid);
+		printf("\tBlocks per grid: %d\n", 1);
+		printf("\tRunning kernel...\n");
+		#endif
 
 		// Fill one block with the results from the other blocks
 		parallelScanMinKernel<<<1, blocks_per_grid>>>
@@ -276,7 +282,7 @@ void q1a (const std::vector<int> &v_in, cudaDeviceProp *devProps) {
 	if (blocks_per_grid > 1) {
 		cudaMemcpy(&a_out, d_out, d_out_size, cudaMemcpyDeviceToHost);
 	} else {
-		cudaMemcpy(&a_out, &d_intermediate[0], d_out_size, cudaMemcpyDeviceToHost);
+		cudaMemcpy(&a_out, d_intermediate, d_out_size, cudaMemcpyDeviceToHost);
 	}
 
 	#if DEBUG
