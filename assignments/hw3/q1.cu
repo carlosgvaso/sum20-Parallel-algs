@@ -15,7 +15,7 @@
 
 
 // Globals
-#define DEBUG 1	//! Enable debug messages
+#define DEBUG 1	//! Enable debug messages (0: no messages, 1: some messages, 2: all messages)
 
 #define INPUT_FILE "inp.txt"		//! Input filename
 #define OUTPUT_FILE_Q1A "q1a.txt"	//! Q1 a output filename
@@ -82,7 +82,7 @@ std::vector<int> read_input (std::string filename) {
  * \param	filename	Name of the output file
  * \param	v_out		Vector to save to file
  */
-void write_output (std::string filename, std::vector<int> v_out) {
+void write_output (std::string filename, const std::vector<int> &v_out) {
 	// Create an output filestream object
 	std::ofstream fout(filename);
 
@@ -100,31 +100,65 @@ void write_output (std::string filename, std::vector<int> v_out) {
 /**
  *
  */
-__global__ void arrayMinKernel(int *d_out, int *d_in)
+__global__ void parallelScanMinKernel(int *d_out, int *d_in, int n)
 {
-	int myId = threadIdx.x + blockDim.x * blockIdx.x;
-	//int tid  = threadIdx.x;
+	int gid = threadIdx.x + blockDim.x * blockIdx.x;
+	int tid = threadIdx.x;
+	int val = 0;
 
-	/* TODO: Implement Hillis-Steele parallel scan min
-	// do reduction in global mem
-	for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1)
-	{
-		if (tid < s)
-		{
-			d_in[myId] += d_in[myId + s];
+	// Ensure we only access available array entries
+	if (gid < n) {
+		#if DEBUG >= 2
+		if (tid == 0) {
+			printf("\tIterations:\n\t\tBlock %d: d = %d: d_in = [ ",
+				   blockIdx.x, 0);
+			for (int i=0; i<n; ++i) {
+				if (i == n-1) {
+					printf("%d ]\n", d_in[i]);
+				} else {
+					printf("%d, ", d_in[i]);
+				}
+			}
 		}
-		__syncthreads();        // make sure all adds at one stage are done!
-	}
+		#endif
+		
+		for (int d=1; d<n; d=d*2) {
+			if (gid >= d) {
+				val = d_in[gid - d];
+			}
+			__syncthreads();
 
-	// only thread 0 writes result for this block back to global mem
-	if (tid == 0)
-	{
-		d_out[blockIdx.x] = d_in[myId];
-	}
-	*/
-	if (myId == 0)
-	{
-		d_out[0] = d_in[0];
+			if (gid >= d) {
+				d_in[gid] = d_in[gid] <= val ? d_in[gid] : val;
+			}
+			__syncthreads();
+
+			#if DEBUG >= 2
+			if (tid == 0) {
+				printf("\t\tBlock %d: d = %d: d_in = [ ", blockIdx.x, d);
+				for (int i=0; i<n; ++i) {
+					if (i == n-1) {
+						printf("%d ]\n", d_in[i]);
+					} else {
+						printf("%d, ", d_in[i]);
+					}
+				}
+			}
+			#endif
+		}
+
+		/* The result for a block is in the last thread entry for that block.
+		 * If n is not a multiple of blockDim.x, the result is the entry of
+		 * gid == n-1.
+		 */
+		if ((tid == blockDim.x && gid != n-1) || gid == n-1) {
+			d_out[blockIdx.x] = d_in[gid];
+
+			#if DEBUG
+			printf("\t\tBlock %d min: d_out[%d] = %d\n",
+				   blockIdx.x, blockIdx.x, d_out[blockIdx.x]);
+			#endif
+		}
 	}
 }
 
@@ -134,38 +168,46 @@ __global__ void arrayMinKernel(int *d_out, int *d_in)
  * minimum value in the input array. Then, it outputs the result to the
  * OUTPUT_FILE_Q1A output file.
  *
+ * This function will only work for problems of size (input array size)
+ * (cudaDeviceProp.maxThreadsPerBlock)^2. For example, if we have a
+ * cudaDeviceProp.maxThreadsPerBlock = 1024 (a normal value for current Nvidia
+ * GPUs), the max problem size is N = 1024^2 = 1,048,576. Since the professor
+ * said the max graded size should be 10^6, this restriction sufices.
+ *
  * \param v_in	Input array as a vector
  */
-void q1a (std::vector<int> v_in) {
+void q1a (const std::vector<int> &v_in, cudaDeviceProp *devProps) {
 	#if DEBUG
 	printf("\tTransfering input array to GPU memory...\n");
 	#endif
 
 	// Declare GPU memory pointers
-	//int *d_in, *d_intermediate, *d_out;
-	int *d_in, *d_out;
+	int *d_in, *d_intermediate, *d_out;
 
 	// Allocate GPU memory
-	cudaMalloc((void **) &d_in, v_in.size());
-	//cudaMalloc((void **) &d_intermediate, ARRAY_BYTES); // overallocated
-	cudaMalloc((void **) &d_out, sizeof(int));
+	int N = v_in.size();				// Problem size (input array size)
+	int d_in_size = N * sizeof(int);	// Input array size in bytes
+	int d_out_size = sizeof(int);		// Output array size in bytes
+
+	#if DEBUG
+	printf("\tN (input array size): %d\n", N);
+	#endif
+
+	if (N > ((int)((*devProps).maxThreadsPerBlock) * (int)((*devProps).maxThreadsPerBlock))) {
+		fprintf(stderr, "ERROR:q1a: problem size (input array size) is too large\n");
+		exit(EXIT_FATAL);
+	}
+
+	cudaMalloc((void **) &d_in, d_in_size);
+	cudaMalloc((void **) &d_intermediate, d_in_size); // overallocated
+	cudaMalloc((void **) &d_out, d_out_size);
 
 	/* Transfer the input array to the GPU
 	 * Since the elements of a vector are stored contiguously in memory, we can
 	 * pass a pointer to the first element of the vector, and that will act as
 	 * if we passed a C array.
 	 */
-	cudaMemcpy(d_in, &v_in[0], v_in.size(), cudaMemcpyHostToDevice);
-
-	/* TODO: Calculate the number of blocks and threads to use
-	 *
-	 * This, assumes that size is not greater than maxThreadsPerBlock^2, and
-	 * that size is a multiple of maxThreadsPerBlock. However, this is not a
-	 * valid assumption.
-	 */
-	const int maxThreadsPerBlock = 512;
-	int threads = maxThreadsPerBlock;
-	int blocks = v_in.size() / maxThreadsPerBlock;
+	cudaMemcpy(d_in, &v_in[0], d_in_size, cudaMemcpyHostToDevice);
 
 	#if DEBUG
 	// Set up a timer to measure the elapsed time to find the min
@@ -177,9 +219,53 @@ void q1a (std::vector<int> v_in) {
 	cudaEventRecord(start, 0);
 	#endif
 
+	// Calculate the number of blocks and threads to use
+	int threads_per_block = (int)((*devProps).maxThreadsPerBlock); // Max number of threads per block
+	int blocks_per_grid = (N + (threads_per_block - 1)) / threads_per_block;
+
+	#if DEBUG
+	printf("\tThreads per block: %d\n", threads_per_block);
+	printf("\tBlocks per grid: %d\n", blocks_per_grid);
+	printf("\tRunning kernel...\n");
+	#endif
+
 	// Launch the kernel to find min
-	//arrayMin(d_out, d_in, v_in.size());
-	arrayMinKernel<<<blocks, threads>>>(d_out, d_in);
+	parallelScanMinKernel<<<blocks_per_grid, threads_per_block>>>
+		(d_intermediate, d_in, N);
+	
+	// Make sure all the blocks finish executing
+	cudaDeviceSynchronize();
+	cudaDeviceSynchronize();
+
+	// If there are more than one block, we need to repeat the process with their results
+	if (blocks_per_grid > 1) {
+		#if DEBUG
+		// Copy array to host
+		int *a_out;
+		a_out = (int*) malloc(d_in_size);
+		cudaMemcpy(a_out, d_intermediate, d_in_size, cudaMemcpyDeviceToHost);
+
+		printf("\tBlock results: d_intermediate = [ ");
+		for (int i=0; i<blocks_per_grid; ++i) {
+			if (i == blocks_per_grid-1) {
+				printf("%d ]\n", a_out[i]);
+			} else {
+				printf("%d, ", a_out[i]);
+			}
+		}
+		free(a_out);
+		#endif
+
+		#if DEBUG
+		printf("\tThreads per block: %d\n", blocks_per_grid);
+		printf("\tBlocks per grid: %d\n", 1);
+		printf("\tRunning kernel...\n");
+		#endif
+
+		// Fill one block with the results from the other blocks
+		parallelScanMinKernel<<<1, blocks_per_grid>>>
+			(d_out, d_intermediate, blocks_per_grid);
+	}
 	
 	#if DEBUG
 	cudaEventRecord(stop, 0);
@@ -193,7 +279,11 @@ void q1a (std::vector<int> v_in) {
 
 	// Copy back the min result from GPU
 	int a_out;
-	cudaMemcpy(&a_out, d_out, sizeof(int), cudaMemcpyDeviceToHost);
+	if (blocks_per_grid > 1) {
+		cudaMemcpy(&a_out, d_out, d_out_size, cudaMemcpyDeviceToHost);
+	} else {
+		cudaMemcpy(&a_out, d_intermediate, d_out_size, cudaMemcpyDeviceToHost);
+	}
 
 	#if DEBUG
 	printf("\tMin: %d\n", a_out);
@@ -205,7 +295,7 @@ void q1a (std::vector<int> v_in) {
 
 	// Free GPU memory
 	cudaFree(d_in);
-	//cudaFree(d_intermediate)
+	cudaFree(d_intermediate);
 	cudaFree(d_out);
 
 	write_output(OUTPUT_FILE_Q1A, v_out);
@@ -215,10 +305,15 @@ void q1a (std::vector<int> v_in) {
  *
  * \param v_in	Input array as a vector
  */
- void q1b (std::vector<int> v_in) {
+ void q1b (const std::vector<int> &v_in, cudaDeviceProp *devProps) {
 	std::vector<int> v_out;
 
 	// TODO: Implement
+	#if DEBUG
+	printf("\tThreads per block: %d\n",
+		   (int)((*devProps).maxThreadsPerBlock));
+	#endif
+
 	v_out = v_in;
 
 	write_output(OUTPUT_FILE_Q1B, v_out);
@@ -226,6 +321,8 @@ void q1a (std::vector<int> v_in) {
 
 
 /** Main
+ *
+ * Set up CUDA device, read input file, and run Q1a and Q1b.
  *
  * \param	argc	Number of command-line arguments
  * \param	argv	Array of command-line arguments
@@ -255,23 +352,27 @@ int main (int argc, char **argv) {
 	// Use device 0
 	cudaSetDevice(dev);
 
-	#if DEBUG
 	if (cudaGetDeviceProperties(&devProps, dev) == 0) {
-		printf("\tDevice ID: %d\n"
+		#if DEBUG
+		printf("Using device:\n"
+			   "\tID: %d\n"
 			   "\tName: %s\n"
 			   "\tGlobal mem: %d B\n"
+			   "\tMax threads per block: %d\n"
 			   "\tCompute: v%d.%d\n"
 			   "\tClock: %d kHz\n",
 			   dev,
 			   devProps.name,
 			   (int)devProps.totalGlobalMem,
+			   (int)devProps.maxThreadsPerBlock,
 			   (int)devProps.major,
 			   (int)devProps.minor,
 			   (int)devProps.clockRate);
+		#endif
 	} else {
 		fprintf(stderr, "ERROR:main: could not find CUDA device information\n");
+		exit(EXIT_FATAL);
 	}
-	#endif
 
 	#if DEBUG
 	std::printf("Reading input array...\n");
@@ -285,14 +386,14 @@ int main (int argc, char **argv) {
 	#endif
 
 	// Problem q1 a
-	q1a(v_in);
+	q1a(v_in, &devProps);
 
 	#if DEBUG
 	std::printf("Running Q1 b...\n");
 	#endif
 
 	// Problem q1 b
-	q1b(v_in);
+	q1b(v_in, &devProps);
 
 	#if DEBUG
 	std::printf("Done\n");
@@ -300,4 +401,3 @@ int main (int argc, char **argv) {
 
 	return 0;
 }
-
