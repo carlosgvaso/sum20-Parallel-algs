@@ -15,7 +15,7 @@
 
 
 // Globals
-#define DEBUG 1	//! Enable debug messages (0: no messages, 1: some messages, 2: all messages)
+#define DEBUG 0	//! Enable debug messages (0: no messages, 1: some messages, 2: all messages)
 
 #define INPUT_FILE "inp.txt"		//! Input filename
 #define OUTPUT_FILE_Q1A "q1a.txt"	//! Q1 a output filename
@@ -77,7 +77,8 @@ std::vector<int> read_input (std::string filename) {
 
 /** Write formated output to file
  *
- * This function uses the output format described in the README.txt file.
+ * This function uses the output format described in the README.txt file. If the
+ * file already exists, it will be overwritten.
  *
  * \param	filename	Name of the output file
  * \param	v_out		Vector to save to file
@@ -97,11 +98,14 @@ void write_output (std::string filename, const std::vector<int> &v_out) {
 	fout.close();
 }
 
-/**
+/** CUDA kernel for the Hillis-Steele parallel scan min
  *
+ * \param	d_out	Pointer to output array in global memory
+ * \param	d_in	Pointer to input array in global memory
+ * \param	n		Size of the problem (input array size)
  */
-__global__ void parallelScanMinKernel(int *d_out, int *d_in, int n)
-{
+__global__ void parallelScanMinKernel(int *d_out, int *d_in, int n) {
+	// Initialize global and thread IDs, and other variables
 	int gid = threadIdx.x + blockDim.x * blockIdx.x;
 	int tid = threadIdx.x;
 	int val = 0;
@@ -110,7 +114,7 @@ __global__ void parallelScanMinKernel(int *d_out, int *d_in, int n)
 	if (gid < n) {
 		#if DEBUG >= 2
 		if (tid == 0) {
-			printf("\tIterations:\n\t\tBlock %d: d = %d: d_in = [ ",
+			printf("\t\tIterations:\n\t\t\tBlock %d: d = %d: d_in = [ ",
 				   blockIdx.x, 0);
 			for (int i=0; i<n; ++i) {
 				if (i == n-1) {
@@ -135,7 +139,7 @@ __global__ void parallelScanMinKernel(int *d_out, int *d_in, int n)
 
 			#if DEBUG >= 2
 			if (tid == 0) {
-				printf("\t\tBlock %d: d = %d: d_in = [ ", blockIdx.x, d);
+				printf("\t\t\tBlock %d: d = %d: d_in = [ ", blockIdx.x, d);
 				for (int i=0; i<n; ++i) {
 					if (i == n-1) {
 						printf("%d ]\n", d_in[i]);
@@ -159,6 +163,31 @@ __global__ void parallelScanMinKernel(int *d_out, int *d_in, int n)
 				   blockIdx.x, blockIdx.x, d_out[blockIdx.x]);
 			#endif
 		}
+	}
+}
+
+/** CUDA kernel to compute array with the last digit of entries in input array
+ *
+ * Specifically, compute array d_out such that d_out[i] is the last digit of
+ * d_in[i] for all i.
+ *
+ * \param	d_out	Pointer to output array in global memory
+ * \param	d_in	Pointer to input array in global memory
+ * \param	n		Size of the problem (input array size)
+ */
+ __global__ void lastDigitKernel(int *d_out, int *d_in, int n) {
+	// Initialize global ID
+	int gid = threadIdx.x + blockDim.x * blockIdx.x;
+
+	// Ensure we only access available array entries
+	if (gid < n) {
+		// Save last digit to output array
+		d_out[gid] = d_in[gid] % 10;
+
+		#if DEBUG >= 2
+		printf("\t\t\td_in[%d] = %d\td_out[%d] = %d\n",
+			   gid, d_in[gid], gid, d_out[gid]);
+		#endif
 	}
 }
 
@@ -286,19 +315,30 @@ void q1a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 		cudaMemcpy(&a_out, d_intermediate, d_out_size, cudaMemcpyDeviceToHost);
 	}
 
-	#if DEBUG
-	printf("\tMin: %d\n", a_out);
+	#if DEBUG >= 2
+	printf("\ta_out: %d\n", a_out);
 	#endif
 	
-	// Copy resulting array to output vector
-	std::vector<int> v_out;
-	v_out.push_back(a_out);
+	// Copy result to output vector
+	std::vector<int> v_out (&a_out, &a_out + 1);
+
+	#if DEBUG
+	printf("\tOutput = [ ");
+	for (int i=0; i<v_out.size(); ++i) {
+		if (i == v_out.size()-1) {
+			printf("%d ]\n", v_out[i]);
+		} else {
+			printf("%d, ", v_out[i]);
+		}
+	}
+	#endif
 
 	// Free GPU memory
 	cudaFree(d_in);
 	cudaFree(d_intermediate);
 	cudaFree(d_out);
 
+	// Write output to file
 	write_output(OUTPUT_FILE_Q1A, v_out);
 }
 
@@ -308,16 +348,117 @@ void q1a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
  * \param	dev_props	CUDA device properties
  */
  void q1b (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
-	std::vector<int> v_out;
-
-	// TODO: Implement
 	#if DEBUG
-	printf("\tThreads per block: %d\n",
-		   (int)((*dev_props).maxThreadsPerBlock));
+	printf("\tTransfering input array to GPU memory...\n");
 	#endif
 
-	v_out = v_in;
+	// Declare GPU memory pointers
+	int *d_in, *d_out;
 
+	// Allocate GPU memory
+	int N = v_in.size();				// Problem size (input array size)
+	int d_in_size = N * sizeof(int);	// Input array size in bytes
+	int d_out_size = d_in_size;			// Output array size in bytes
+
+	#if DEBUG
+	printf("\tN (input array size): %d\n", N);
+	#endif
+
+	if (N > ((int)((*dev_props).maxThreadsPerBlock) * (int)((*dev_props).maxThreadsPerBlock))) {
+		fprintf(stderr, "ERROR:q1a: problem size (input array size) is too large\n");
+		exit(EXIT_FATAL);
+	}
+
+	cudaMalloc((void **) &d_in, d_in_size);
+	cudaMalloc((void **) &d_out, d_out_size);
+
+	/* Transfer the input array to the GPU
+	 * Since the elements of a vector are stored contiguously in memory, we can
+	 * pass a pointer to the first element of the vector, and that will act as
+	 * if we passed a C array.
+	 */
+	cudaMemcpy(d_in, &v_in[0], d_in_size, cudaMemcpyHostToDevice);
+
+	#if DEBUG
+	// Set up a timer to measure the elapsed time to find the min
+	cudaEvent_t start, stop;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	
+	printf("\tFinding last digit for all entries in the array...\n");
+	cudaEventRecord(start, 0);
+	#endif
+
+	// Calculate the number of blocks and threads to use
+	int threads_per_block = (int)((*dev_props).maxThreadsPerBlock); // Max number of threads per block
+	int blocks_per_grid = (N + (threads_per_block - 1)) / threads_per_block;
+
+	#if DEBUG
+	printf("\tThreads per block: %d\n", threads_per_block);
+	printf("\tBlocks per grid: %d\n", blocks_per_grid);
+	printf("\tRunning kernel...\n");
+	#endif
+	#if DEBUG >= 2
+	printf("\t\tIterations:\n");
+	#endif
+
+	// Launch the kernel to find min
+	lastDigitKernel<<<blocks_per_grid, threads_per_block>>>
+		(d_out, d_in, N);
+	
+	// Make sure all the blocks finish executing
+	cudaDeviceSynchronize();
+	cudaDeviceSynchronize();
+	
+	#if DEBUG
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+
+	// Calculate elapsed time, and print it
+	float elapsedTime;
+	cudaEventElapsedTime(&elapsedTime, start, stop);
+	printf("\tAverage time elapsed: %f\n", elapsedTime);
+	#endif
+
+	// Copy back the result from GPU
+	int *a_out;
+	a_out = (int*) malloc(d_out_size);
+	cudaMemcpy(a_out, d_out, d_out_size, cudaMemcpyDeviceToHost);
+
+	#if DEBUG >= 2
+	printf("\ta_out = [ ");
+	for (int i=0; i<N; ++i) {
+		if (i == N-1) {
+			printf("%d ]\n", a_out[i]);
+		} else {
+			printf("%d, ", a_out[i]);
+		}
+	}
+	#endif
+	
+	// Copy resulting array to output vector
+	std::vector<int> v_out (a_out, a_out + N);
+
+	#if DEBUG
+	printf("\tOutput = [ ");
+	for (int i=0; i<v_out.size(); ++i) {
+		if (i == v_out.size()-1) {
+			printf("%d ]\n", v_out[i]);
+		} else {
+			printf("%d, ", v_out[i]);
+		}
+	}
+	#endif
+
+
+	// Free GPU memory
+	cudaFree(d_in);
+	cudaFree(d_out);
+
+	// Free host memory
+	free(a_out);
+
+	// Save output to file
 	write_output(OUTPUT_FILE_Q1B, v_out);
 }
 
@@ -401,12 +542,28 @@ int main (int argc, char **argv) {
 	// Problem q1 a
 	q1a(v_in, &dev_props);
 
+	/*
+	#if DEBUG
+	std::printf("Reseting device...\n");
+	#endif
+
+	cudaDeviceReset();
+	*/
+
 	#if DEBUG
 	std::printf("Running Q1 b...\n");
 	#endif
 
 	// Problem q1 b
 	q1b(v_in, &dev_props);
+
+	/*
+	#if DEBUG
+	std::printf("Reseting device...\n");
+	#endif
+
+	cudaDeviceReset();
+	*/
 
 	#if DEBUG
 	std::printf("Done\n");
