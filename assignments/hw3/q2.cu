@@ -183,6 +183,25 @@
 	 
  }
  
+ //2.c
+ __global__ void scan(int *d_B, int size)
+ {
+	 //printf("result : %d \n",result[blockIdx.x]);
+	 int tid=threadIdx.x;
+	 int blockid=blockIdx.x;
+	 int offset= blockid * blockDim.x;
+	 int gid=tid + offset;
+	if(gid<size){
+		for(int offset=1;offset<=tid;offset *= 2){
+			d_B[gid]+=d_B[gid-offset];
+			__syncthreads();
+		}
+	}
+	__syncthreads();
+	 //
+	 
+ }
+
  /** Main
   *
   * \param	argc	Number of command-line arguments
@@ -198,12 +217,14 @@
 	 int size_arr=arr_in.size();
 	 int size_B=10;
 	 int B[size_B];
- 
+	 int C[size_B];
 	 for(int i=0;i<size_B;i++){
 		 B[i]=0;
+		 C[i]=0;
 	 }
 	 //Global variables
 	 int* d_B;
+	 int* d_C;
 	 int *d_arr_in;
 	 int size_arr_byte=sizeof(int) * size_arr;
 	 int size_B_byte=sizeof(int)*size_B;
@@ -211,14 +232,19 @@
 	 cudaMemcpy(d_arr_in, arr_input, size_arr_byte, cudaMemcpyHostToDevice);
 	 cudaMalloc((void**)&d_B,size_B_byte);
 	 cudaMemcpy(d_B,B, size_B_byte,cudaMemcpyHostToDevice);
+	 cudaMalloc((void**)&d_C,size_B_byte);
+	 cudaMemcpy(d_C,C, size_B_byte,cudaMemcpyHostToDevice);
 	 dim3 block(32);
 	 dim3 grid (((size_arr/32)+1));
-	 unique_idx_calc_threadIdx<<<grid,block>>>(d_arr_in,d_B, size_arr);
+	 //unique_idx_calc_threadIdx<<<grid,block>>>(d_arr_in,d_B, size_arr);
 	 sharedCount<<<grid,block, sizeof(int)*SHARED_ARRAY_SIZE>>>(d_arr_in,d_B,size_arr);
+	 //cudaMemcpy(&B,d_B,size_B_byte,cudaMemcpyDeviceToHost);
+	 scan<<<1,block>>>(d_B,size_B);
+	 cudaMemcpy(&C,d_B,size_B_byte,cudaMemcpyDeviceToHost);
 	 cudaDeviceSynchronize();
-	 cudaMemcpy(&B,d_B,size_B_byte,cudaMemcpyDeviceToHost);
+	
 	 for(int i=0;i<size_B;i++){
-		 printf("%d \n", B[i]);
+		 printf("%d \n", C[i]);
 	 }
  
 	 cudaDeviceReset();
