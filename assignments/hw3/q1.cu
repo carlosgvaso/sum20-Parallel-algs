@@ -151,7 +151,7 @@ __global__ void parallelScanMinKernel(int *d_out, int *d_in, int n)
 		 * If n is not a multiple of blockDim.x, the result is the entry of
 		 * gid == n-1.
 		 */
-		if ((tid == blockDim.x && gid != n-1) || gid == n-1) {
+		if ((tid == blockDim.x-1 && gid != n-1) || gid == n-1) {
 			d_out[blockIdx.x] = d_in[gid];
 
 			#if DEBUG
@@ -174,9 +174,10 @@ __global__ void parallelScanMinKernel(int *d_out, int *d_in, int n)
  * GPUs), the max problem size is N = 1024^2 = 1,048,576. Since the professor
  * said the max graded size should be 10^6, this restriction sufices.
  *
- * \param v_in	Input array as a vector
+ * \param	v_in		Input array as a vector
+ * \param	dev_props	CUDA device properties
  */
-void q1a (const std::vector<int> &v_in, cudaDeviceProp *devProps) {
+void q1a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	#if DEBUG
 	printf("\tTransfering input array to GPU memory...\n");
 	#endif
@@ -193,7 +194,7 @@ void q1a (const std::vector<int> &v_in, cudaDeviceProp *devProps) {
 	printf("\tN (input array size): %d\n", N);
 	#endif
 
-	if (N > ((int)((*devProps).maxThreadsPerBlock) * (int)((*devProps).maxThreadsPerBlock))) {
+	if (N > ((int)((*dev_props).maxThreadsPerBlock) * (int)((*dev_props).maxThreadsPerBlock))) {
 		fprintf(stderr, "ERROR:q1a: problem size (input array size) is too large\n");
 		exit(EXIT_FATAL);
 	}
@@ -220,7 +221,7 @@ void q1a (const std::vector<int> &v_in, cudaDeviceProp *devProps) {
 	#endif
 
 	// Calculate the number of blocks and threads to use
-	int threads_per_block = (int)((*devProps).maxThreadsPerBlock); // Max number of threads per block
+	int threads_per_block = (int)((*dev_props).maxThreadsPerBlock); // Max number of threads per block
 	int blocks_per_grid = (N + (threads_per_block - 1)) / threads_per_block;
 
 	#if DEBUG
@@ -303,15 +304,16 @@ void q1a (const std::vector<int> &v_in, cudaDeviceProp *devProps) {
 
 /** Q1 b) Compute an array B such that B[i] is the last digit of A[i] for all i
  *
- * \param v_in	Input array as a vector
+ * \param	v_in		Input array as a vector
+ * \param	dev_props	CUDA device properties
  */
- void q1b (const std::vector<int> &v_in, cudaDeviceProp *devProps) {
+ void q1b (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	std::vector<int> v_out;
 
 	// TODO: Implement
 	#if DEBUG
 	printf("\tThreads per block: %d\n",
-		   (int)((*devProps).maxThreadsPerBlock));
+		   (int)((*dev_props).maxThreadsPerBlock));
 	#endif
 
 	v_out = v_in;
@@ -334,17 +336,17 @@ int main (int argc, char **argv) {
 	#endif
 
 	std::vector<int> v_in;
-	int deviceCount;
+	int device_count;
 	int dev = 0;
-	cudaDeviceProp devProps;
+	cudaDeviceProp dev_props;
 
 	#if DEBUG
 	printf("Detecting CUDA devices...\n");
 	#endif
 
 	// Check there are CUDA devices available
-	cudaGetDeviceCount(&deviceCount);
-	if (deviceCount == 0) {
+	cudaGetDeviceCount(&device_count);
+	if (device_count == 0) {
 		fprintf(stderr, "ERROR:main: no CUDA devices found\n");
 		exit(EXIT_FATAL);
 	}
@@ -352,7 +354,7 @@ int main (int argc, char **argv) {
 	// Use device 0
 	cudaSetDevice(dev);
 
-	if (cudaGetDeviceProperties(&devProps, dev) == 0) {
+	if (cudaGetDeviceProperties(&dev_props, dev) == 0) {
 		#if DEBUG
 		printf("Using device:\n"
 			   "\tID: %d\n"
@@ -362,12 +364,12 @@ int main (int argc, char **argv) {
 			   "\tCompute: v%d.%d\n"
 			   "\tClock: %d kHz\n",
 			   dev,
-			   devProps.name,
-			   (int)devProps.totalGlobalMem,
-			   (int)devProps.maxThreadsPerBlock,
-			   (int)devProps.major,
-			   (int)devProps.minor,
-			   (int)devProps.clockRate);
+			   dev_props.name,
+			   (int)dev_props.totalGlobalMem,
+			   (int)dev_props.maxThreadsPerBlock,
+			   (int)dev_props.major,
+			   (int)dev_props.minor,
+			   (int)dev_props.clockRate);
 		#endif
 	} else {
 		fprintf(stderr, "ERROR:main: could not find CUDA device information\n");
@@ -381,19 +383,30 @@ int main (int argc, char **argv) {
 	// Read input array
 	v_in = read_input(INPUT_FILE);
 
+	#if DEBUG >= 2
+	printf("\tInput array = [ ");
+	for (int i=0; i<v_in.size(); ++i) {
+		if (i == v_in.size()-1) {
+			printf("%d ]\n", v_in[i]);
+		} else {
+			printf("%d, ", v_in[i]);
+		}
+	}
+	#endif
+
 	#if DEBUG
 	std::printf("Running Q1 a...\n");
 	#endif
 
 	// Problem q1 a
-	q1a(v_in, &devProps);
+	q1a(v_in, &dev_props);
 
 	#if DEBUG
 	std::printf("Running Q1 b...\n");
 	#endif
 
 	// Problem q1 b
-	q1b(v_in, &devProps);
+	q1b(v_in, &dev_props);
 
 	#if DEBUG
 	std::printf("Done\n");
