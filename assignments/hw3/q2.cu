@@ -13,7 +13,8 @@
  #include <stdexcept>	// std::runtime_error
  #include <sstream>		// std::stringstream
  
- 
+ // Shared
+ #define SHARED_ARRAY_SIZE 10
  // Globals
  #define INPUT_FILE "inp.txt"
  #define OUTPUT_FILE_Q2A "q2a.txt"
@@ -89,7 +90,7 @@
 	 fout.close();
  }
  
- 
+ // 2.a 
  __global__ void unique_idx_calc_threadIdx(int * input, int * d_B, int size)
  {
 	 //printf("result : %d \n",result[blockIdx.x]);
@@ -134,6 +135,54 @@
 	 
  }
  
+ 
+ // 2.b
+ __global__ void sharedCount(int * input, int * d_B, int size)
+ {
+	 //printf("result : %d \n",result[blockIdx.x]);
+	 int tid=threadIdx.x;
+	 int blockid=blockIdx.x;
+	 int offset= blockid * blockDim.x;
+	 int gid=tid + offset;
+	 extern __shared__ int B_Array[];
+	 B_Array[tid]=input[gid];
+	 if(gid<size){
+		 if(B_Array[tid]>=0 && B_Array[tid]<100){
+			 atomicAdd(&d_B[0],1);
+		 }
+		 if(B_Array[tid]>=100 && B_Array[tid]<200){
+			 atomicAdd(&d_B[1],1);
+		 }
+		 if(B_Array[tid]>=200 && B_Array[tid]<300){
+			 atomicAdd(&d_B[2],1);
+		 }
+		 if(B_Array[tid]>=300 && B_Array[tid]<400){
+			 atomicAdd(&d_B[3],1);
+		 }
+		 if(B_Array[tid]>=400 && B_Array[tid]<500){
+			 atomicAdd(&d_B[4],1);
+		 }
+		 if(B_Array[tid]>=500 && B_Array[tid]<600){
+			 atomicAdd(&d_B[5],1);
+		 }
+		 if(B_Array[tid]>=600 && B_Array[tid]<700){
+			 atomicAdd(&d_B[6],1);
+		 }
+		 if(B_Array[tid]>=700 && B_Array[tid]<800){
+			 atomicAdd(&d_B[7],1);
+		 }
+		 if(B_Array[tid]>=800 && B_Array[tid]<900){
+			 atomicAdd(&d_B[8],1);
+		 }
+		 if(B_Array[tid]>=900 && B_Array[tid]<1000){
+			 atomicAdd(&d_B[9],1);
+		 }
+	 }	
+	 __syncthreads();
+	 //
+	 
+ }
+ 
  /** Main
   *
   * \param	argc	Number of command-line arguments
@@ -149,13 +198,7 @@
 	 int size_arr=arr_in.size();
 	 int size_B=10;
 	 int B[size_B];
-	 int c=0;
-	 for(int i=0;i<size_arr;i++){
-		 if(arr_input[i]>=200 && arr_input[i]<300){
-			 c=c+1;
-		 }
-	 }
-	 printf("Values in the range 0-99 : %d \n", c);
+ 
 	 for(int i=0;i<size_B;i++){
 		 B[i]=0;
 	 }
@@ -171,9 +214,9 @@
 	 dim3 block(32);
 	 dim3 grid (((size_arr/32)+1));
 	 unique_idx_calc_threadIdx<<<grid,block>>>(d_arr_in,d_B, size_arr);
+	 sharedCount<<<grid,block, sizeof(int)*SHARED_ARRAY_SIZE>>>(d_arr_in,d_B,size_arr);
 	 cudaDeviceSynchronize();
 	 cudaMemcpy(&B,d_B,size_B_byte,cudaMemcpyDeviceToHost);
-	 printf("B array: \n");
 	 for(int i=0;i<size_B;i++){
 		 printf("%d \n", B[i]);
 	 }
