@@ -1,7 +1,8 @@
 // Homework 3 gitignore
 
 // Ignore everything except the whitelisted files
-*
+/*
+/*/
 !.gitignore
 !README.txt
 !inp.txt
@@ -9,4 +10,6 @@
 !q2.cu
 !q1-batch
 !q2-batch
+!makefile
+!/inp_files/
 
