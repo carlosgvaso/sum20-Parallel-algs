@@ -175,7 +175,7 @@ __global__ void parallelScanMinKernel(int *d_out, int *d_in, int n) {
  * \param	d_in	Pointer to input array in global memory
  * \param	n		Size of the problem (input array size)
  */
- __global__ void lastDigitKernel(int *d_out, int *d_in, int n) {
+__global__ void lastDigitKernel(int *d_out, int *d_in, int n) {
 	// Initialize global ID
 	int gid = threadIdx.x + blockDim.x * blockIdx.x;
 
@@ -347,7 +347,7 @@ void q1a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
  * \param	v_in		Input array as a vector
  * \param	dev_props	CUDA device properties
  */
- void q1b (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
+void q1b (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	#if DEBUG
 	printf("\tTransfering input array to GPU memory...\n");
 	#endif
@@ -364,10 +364,12 @@ void q1a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	printf("\tN (input array size): %d\n", N);
 	#endif
 
+	/*
 	if (N > ((int)((*dev_props).maxThreadsPerBlock) * (int)((*dev_props).maxThreadsPerBlock))) {
 		fprintf(stderr, "ERROR:q1a: problem size (input array size) is too large\n");
 		exit(EXIT_FATAL);
 	}
+	*/
 
 	cudaMalloc((void **) &d_in, d_in_size);
 	cudaMalloc((void **) &d_out, d_out_size);
