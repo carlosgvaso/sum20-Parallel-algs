@@ -15,7 +15,7 @@
 
 
 // Globals
-#define DEBUG 2	//! Enable debug messages (0: no messages, 1: some messages, 2: all messages)
+#define DEBUG 0	//! Enable debug messages (0: no messages, 1: some messages, 2: all messages)
 
 #define INPUT_FILE "inp.txt"
 #define OUTPUT_FILE_Q2A "q2a.txt"
@@ -25,7 +25,7 @@
 #define EXIT_OK 0		//! Exit code success
 #define EXIT_FATAL 1	//! Exit code unrecoverable error
 
-#define SHARED_ARRAY_SIZE 10
+#define RANGES_NUM 10	//! Number of ranges (d_out size)
 
 
 /** Read input from file
@@ -106,90 +106,142 @@ void write_output (std::string filename, std::vector<int> arr_out) {
  * \param	n		Size of the problem (input array size)
  */
 __global__ void counterGlobalKernel(int *d_out, int *d_in, int n) {
-	//printf("result : %d \n",result[blockIdx.x]);
 	int tid=threadIdx.x;
 	int blockid=blockIdx.x;
 	int offset= blockid * blockDim.x;
 	int gid=tid + offset;
 
-	if(gid < n){
-		if(d_in[gid]>=0 && d_in[gid]<100){
+	if (gid < n){
+		if (d_in[gid]>=0 && d_in[gid]<100){
 			atomicAdd(&d_out[0],1);
 		}
-		if(d_in[gid]>=100 && d_in[gid]<200){
+		else if (d_in[gid]>=100 && d_in[gid]<200){
 			atomicAdd(&d_out[1],1);
 		}
-		if(d_in[gid]>=200 && d_in[gid]<300){
+		else if (d_in[gid]>=200 && d_in[gid]<300){
 			atomicAdd(&d_out[2],1);
 		}
-		if(d_in[gid]>=300 && d_in[gid]<400){
+		else if (d_in[gid]>=300 && d_in[gid]<400){
 			atomicAdd(&d_out[3],1);
 		}
-		if(d_in[gid]>=400 && d_in[gid]<500){
+		else if (d_in[gid]>=400 && d_in[gid]<500){
 			atomicAdd(&d_out[4],1);
 		}
-		if(d_in[gid]>=500 && d_in[gid]<600){
+		else if (d_in[gid]>=500 && d_in[gid]<600){
 			atomicAdd(&d_out[5],1);
 		}
-		if(d_in[gid]>=600 && d_in[gid]<700){
+		else if (d_in[gid]>=600 && d_in[gid]<700){
 			atomicAdd(&d_out[6],1);
 		}
-		if(d_in[gid]>=700 && d_in[gid]<800){
+		else if (d_in[gid]>=700 && d_in[gid]<800){
 			atomicAdd(&d_out[7],1);
 		}
-		if(d_in[gid]>=800 && d_in[gid]<900){
+		else if (d_in[gid]>=800 && d_in[gid]<900){
 			atomicAdd(&d_out[8],1);
 		}
-		if(d_in[gid]>=900 && d_in[gid]<1000){
+		else if (d_in[gid]>=900 && d_in[gid]<1000){
 			atomicAdd(&d_out[9],1);
 		}
 	}
-	__syncthreads(); 
+	__syncthreads();
+
+	#if DEBUG
+	if (gid == 0) {
+		printf("\t\tResult: [ ");
+		for (int i=0; i<RANGES_NUM; ++i) {
+			if (i == RANGES_NUM-1) {
+				printf("%d ]\n", d_out[i]);
+			} else {
+				printf("%d, ", d_out[i]);
+			}
+		}
+	}
+	#endif
 }
 
-// 2.b
-__global__ void sharedCount(int * input, int * d_B, int size)
-{
-	//printf("result : %d \n",result[blockIdx.x]);
-	int tid=threadIdx.x;
-	int blockid=blockIdx.x;
-	int offset= blockid * blockDim.x;
-	int gid=tid + offset;
-	extern __shared__ int B_Array[];
-	B_Array[tid]=input[gid];
-	if(gid<size){
-		if(B_Array[tid]>=0 && B_Array[tid]<100){
-			atomicAdd(&d_B[0],1);
-		}
-		if(B_Array[tid]>=100 && B_Array[tid]<200){
-			atomicAdd(&d_B[1],1);
-		}
-		if(B_Array[tid]>=200 && B_Array[tid]<300){
-			atomicAdd(&d_B[2],1);
-		}
-		if(B_Array[tid]>=300 && B_Array[tid]<400){
-			atomicAdd(&d_B[3],1);
-		}
-		if(B_Array[tid]>=400 && B_Array[tid]<500){
-			atomicAdd(&d_B[4],1);
-		}
-		if(B_Array[tid]>=500 && B_Array[tid]<600){
-			atomicAdd(&d_B[5],1);
-		}
-		if(B_Array[tid]>=600 && B_Array[tid]<700){
-			atomicAdd(&d_B[6],1);
-		}
-		if(B_Array[tid]>=700 && B_Array[tid]<800){
-			atomicAdd(&d_B[7],1);
-		}
-		if(B_Array[tid]>=800 && B_Array[tid]<900){
-			atomicAdd(&d_B[8],1);
-		}
-		if(B_Array[tid]>=900 && B_Array[tid]<1000){
-			atomicAdd(&d_B[9],1);
+/** CUDA kernel for counting the entries in parallel using shared memory
+ *
+ * \param	d_out	Pointer to output array in global memory
+ * \param	d_in	Pointer to input array in global memory
+ * \param	n		Size of the problem (input array size)
+ */
+__global__ void counterSharedKernel(int *d_out, int *d_in, int n) {
+	/* d_shared is allocated in the kernel call 3rd arg: <<<blk, th, shmem>>>.
+	 * We allocated RANGES_NUM extra entries in the array to save each block's
+	 * results to shared memory at the end of the array, after the input arrays
+	 * entries.
+	 */
+	extern __shared__ int d_shared[];
+
+	int tid = threadIdx.x;
+	int blockid = blockIdx.x;
+	int offset = blockid * blockDim.x;
+	int gid = tid + offset;
+
+	// Load shared mem from shared mem
+	if (gid < n) {
+		d_shared[tid] = d_in[gid];
+
+		// Initialize the results part of the array to all zeroes
+		if (tid == 0) {
+			for (int i=n; i<n+RANGES_NUM; ++i) {
+				d_shared[i] = 0;
+			}
 		}
 	}
 	__syncthreads();
+
+	if (gid < n){
+		if (d_shared[tid]>=0 && d_shared[tid]<100){
+			atomicAdd(&d_shared[n+0],1);
+		}
+		else if (d_shared[tid]>=100 && d_shared[tid]<200){
+			atomicAdd(&d_shared[n+1],1);
+		}
+		else if (d_shared[tid]>=200 && d_shared[tid]<300){
+			atomicAdd(&d_shared[n+2],1);
+		}
+		else if (d_shared[tid]>=300 && d_shared[tid]<400){
+			atomicAdd(&d_shared[n+3],1);
+		}
+		else if (d_shared[tid]>=400 && d_shared[tid]<500){
+			atomicAdd(&d_shared[n+4],1);
+		}
+		else if (d_shared[tid]>=500 && d_shared[tid]<600){
+			atomicAdd(&d_shared[n+5],1);
+		}
+		else if (d_shared[tid]>=600 && d_shared[tid]<700){
+			atomicAdd(&d_shared[n+6],1);
+		}
+		else if (d_shared[tid]>=700 && d_shared[tid]<800){
+			atomicAdd(&d_shared[n+7],1);
+		}
+		else if (d_shared[tid]>=800 && d_shared[tid]<900){
+			atomicAdd(&d_shared[n+8],1);
+		}
+		else if (d_shared[tid]>=900 && d_shared[tid]<1000){
+			atomicAdd(&d_shared[n+9],1);
+		}
+	}
+	__syncthreads();
+
+	// Only 1 thread syncs data to global memory
+	if (tid == 0) {
+		for (int i=0; i<RANGES_NUM; ++i) {
+			atomicAdd(&d_out[i], d_shared[n+i]);
+		}
+
+		#if DEBUG
+		printf("\t\tResult: Block %d: [ ", blockIdx.x);
+		for (int i=0; i<RANGES_NUM; ++i) {
+			if (i == RANGES_NUM-1) {
+				printf("%d ]\n", d_shared[n+i]);
+			} else {
+				printf("%d, ", d_shared[n+i]);
+			}
+		}
+		#endif
+	}
 }
 
 /** CUDA kernel for the Hillis-Steele parallel scan sum
@@ -278,7 +330,7 @@ std::vector<int> q2a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 
 	// Allocate GPU memory
 	int N = v_in.size();					// Problem size (input array size)
-	int N_out = 10;							// Output array size
+	int N_out = RANGES_NUM;					// Output array size
 	int d_in_size = N * sizeof(int);		// Input array size in bytes
 	int d_out_size = N_out * sizeof(int);	// Output array size in bytes
 
@@ -314,7 +366,7 @@ std::vector<int> q2a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 	
-	printf("\tCounting entries in global memory of GPU...\n");
+	printf("\tCounting entries in global memory...\n");
 	cudaEventRecord(start, 0);
 	#endif
 
@@ -326,9 +378,6 @@ std::vector<int> q2a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	printf("\tThreads per block: %d\n", threads_per_block);
 	printf("\tBlocks per grid: %d\n", blocks_per_grid);
 	printf("\tRunning kernel...\n");
-	#endif
-	#if DEBUG >= 2
-	printf("\t\tIterations:\n");
 	#endif
 
 	// Launch the kernel to find min
@@ -392,9 +441,11 @@ std::vector<int> q2a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	return v_out;
 }
 
-/** Q2 b) Compute a counter array in global memory of GPU
+/** Q2 b) Compute a counter array in shared memory of GPU
  *
- * TODO: Implement
+ * Repeat part (a) but first use the shared memory in a block for updating the
+ * local copy of B in each block. Once every block is done, add all local copies
+ * to get the global copy of B.
  *
  * \param	v_in		Input array as a vector
  * \param	dev_props	CUDA device properties
@@ -409,7 +460,7 @@ void q2b (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 
 	// Allocate GPU memory
 	int N = v_in.size();					// Problem size (input array size)
-	int N_out = 10;							// Output array size
+	int N_out = RANGES_NUM;					// Output array size
 	int d_in_size = N * sizeof(int);		// Input array size in bytes
 	int d_out_size = N_out * sizeof(int);	// Output array size in bytes
 
@@ -445,7 +496,7 @@ void q2b (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 	
-	printf("\tCounting entries in global memory of GPU...\n");
+	printf("\tCounting entries in shared memory...\n");
 	cudaEventRecord(start, 0);
 	#endif
 
@@ -458,13 +509,15 @@ void q2b (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	printf("\tBlocks per grid: %d\n", blocks_per_grid);
 	printf("\tRunning kernel...\n");
 	#endif
-	#if DEBUG >= 2
-	printf("\t\tIterations:\n");
-	#endif
 
-	// Launch the kernel to find min
-	counterGlobalKernel<<<blocks_per_grid, threads_per_block>>>
-		(d_in, d_out, N);
+	/* Launch the kernel to find min
+	 * The 3rd arg to kernel is the size of the shared memory array. This is the
+	 * size of the input array plus the size of the output array, because we
+	 * save input array and each block's results to shared memory. The input
+	 * array is saved first, and the output array is saved after this.
+	 */
+	counterSharedKernel<<<blocks_per_grid, threads_per_block, d_in_size+d_out_size>>>
+		(d_out, d_in, N);
 	
 	// Make sure all the blocks finish executing
 	cudaDeviceSynchronize();
@@ -568,7 +621,7 @@ void q2c (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 	
-	printf("\tCounting entries in global memory of GPU...\n");
+	printf("\tCounting entries using result from Q2 a...\n");
 	cudaEventRecord(start, 0);
 	#endif
 
@@ -643,54 +696,13 @@ void q2c (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 
 /** Main
  *
+ * Set up CUDA device, read input file, and run Q2a, Q2b and Q2c.
+ *
  * \param	argc	Number of command-line arguments
  * \param	argv	Array of command-line arguments
  * \return	Program return code
  */
 int main (int argc, char **argv) {
-	/*
-	std::vector<int> arr_in;
-	arr_in = read_input(INPUT_FILE);
-	int* arr_input;
-	arr_input=arr_in.data();
-	int size_arr=arr_in.size();
-	int size_B=10;
-	int B[size_B];
-	int C[size_B];
-	for(int i=0;i<size_B;i++){
-		B[i]=0;
-		C[i]=0;
-	}
-	//Global variables
-	int* d_B;
-	int* d_C;
-	int *d_arr_in;
-	int size_arr_byte=sizeof(int) * size_arr;
-	int size_B_byte=sizeof(int)*size_B;
-	cudaMalloc((void**)&d_arr_in,size_arr_byte);
-	cudaMemcpy(d_arr_in, arr_input, size_arr_byte, cudaMemcpyHostToDevice);
-	cudaMalloc((void**)&d_B,size_B_byte);
-	cudaMemcpy(d_B,B, size_B_byte,cudaMemcpyHostToDevice);
-	cudaMalloc((void**)&d_C,size_B_byte);
-	cudaMemcpy(d_C,C, size_B_byte,cudaMemcpyHostToDevice);
-	dim3 block(32);
-	dim3 grid (((size_arr/32)+1));
-	//counterGlobalKernel<<<grid,block>>>(d_arr_in,d_B, size_arr);
-	sharedCount<<<grid,block, sizeof(int)*SHARED_ARRAY_SIZE>>>(d_arr_in,d_B,size_arr);
-	//cudaMemcpy(&B,d_B,size_B_byte,cudaMemcpyDeviceToHost);
-	scan<<<1,block>>>(d_B,size_B);
-	cudaMemcpy(&C,d_B,size_B_byte,cudaMemcpyDeviceToHost);
-	cudaDeviceSynchronize();
-
-	for(int i=0;i<size_B;i++){
-		printf("%d \n", C[i]);
-	}
-
-	cudaDeviceReset();
-
-	return 0;
-	*/
-
 	#if DEBUG
 	std::printf("Executing main...\n");
 	#endif
@@ -775,7 +787,7 @@ int main (int argc, char **argv) {
 	#endif
 
 	// Problem q2 b
-	//q2b(v_in, &dev_props);
+	q2b(v_in, &dev_props);
 
 	/*
 	#if DEBUG
