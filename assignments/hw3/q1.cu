@@ -15,7 +15,7 @@
 
 
 // Globals
-#define DEBUG 0	//! Enable debug messages (0: no messages, 1: some messages, 2: all messages)
+#define DEBUG 0	//! Enable debug messages (0: no log output, 1: non-verbose logs, 2: verbose logs, 3: all logs)
 
 #define INPUT_FILE "inp.txt"		//! Input filename
 #define OUTPUT_FILE_Q1A "q1a.txt"	//! Q1 a output filename
@@ -112,7 +112,7 @@ __global__ void parallelScanMinKernel(int *d_out, int *d_in, int n) {
 
 	// Ensure we only access available array entries
 	if (gid < n) {
-		#if DEBUG >= 2
+		#if DEBUG >= 3
 		if (tid == 0) {
 			printf("\t\tIterations:\n\t\t\tBlock %d: d = %d: d_in = [ ",
 				   blockIdx.x, 0);
@@ -137,7 +137,7 @@ __global__ void parallelScanMinKernel(int *d_out, int *d_in, int n) {
 			}
 			__syncthreads();
 
-			#if DEBUG >= 2
+			#if DEBUG >= 3
 			if (tid == 0) {
 				printf("\t\t\tBlock %d: d = %d: d_in = [ ", blockIdx.x, d);
 				for (int i=0; i<n; ++i) {
@@ -158,7 +158,7 @@ __global__ void parallelScanMinKernel(int *d_out, int *d_in, int n) {
 		if ((tid == blockDim.x-1 && gid != n-1) || gid == n-1) {
 			d_out[blockIdx.x] = d_in[gid];
 
-			#if DEBUG
+			#if DEBUG >= 2
 			printf("\t\tBlock %d min: d_out[%d] = %d\n",
 				   blockIdx.x, blockIdx.x, d_out[blockIdx.x]);
 			#endif
@@ -184,7 +184,7 @@ __global__ void lastDigitKernel(int *d_out, int *d_in, int n) {
 		// Save last digit to output array
 		d_out[gid] = d_in[gid] % 10;
 
-		#if DEBUG >= 2
+		#if DEBUG >= 3
 		printf("\t\t\td_in[%d] = %d\td_out[%d] = %d\n",
 			   gid, d_in[gid], gid, d_out[gid]);
 		#endif
@@ -246,7 +246,6 @@ void q1a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	cudaEventCreate(&stop);
 	
 	printf("\tFinding minimum entry in the array...\n");
-	cudaEventRecord(start, 0);
 	#endif
 
 	// Calculate the number of blocks and threads to use
@@ -257,6 +256,7 @@ void q1a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	printf("\tThreads per block: %d\n", threads_per_block);
 	printf("\tBlocks per grid: %d\n", blocks_per_grid);
 	printf("\tRunning kernel...\n");
+	cudaEventRecord(start, 0);
 	#endif
 
 	// Launch the kernel to find min
@@ -269,7 +269,7 @@ void q1a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 
 	// If there are more than one block, we need to repeat the process with their results
 	if (blocks_per_grid > 1) {
-		#if DEBUG
+		#if DEBUG >=2
 		// Copy array to host
 		int *a_out;
 		a_out = (int*) malloc(d_in_size);
@@ -286,7 +286,7 @@ void q1a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 		free(a_out);
 		#endif
 
-		#if DEBUG
+		#if DEBUG >= 2
 		printf("\tThreads per block: %d\n", blocks_per_grid);
 		printf("\tBlocks per grid: %d\n", 1);
 		printf("\tRunning kernel...\n");
@@ -388,7 +388,6 @@ void q1b (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	cudaEventCreate(&stop);
 	
 	printf("\tFinding last digit for all entries in the array...\n");
-	cudaEventRecord(start, 0);
 	#endif
 
 	// Calculate the number of blocks and threads to use
@@ -399,8 +398,10 @@ void q1b (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	printf("\tThreads per block: %d\n", threads_per_block);
 	printf("\tBlocks per grid: %d\n", blocks_per_grid);
 	printf("\tRunning kernel...\n");
+	cudaEventRecord(start, 0);
 	#endif
-	#if DEBUG >= 2
+
+	#if DEBUG >= 3
 	printf("\t\tIterations:\n");
 	#endif
 

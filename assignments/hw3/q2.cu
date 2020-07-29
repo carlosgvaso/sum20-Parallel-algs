@@ -15,7 +15,7 @@
 
 
 // Globals
-#define DEBUG 0	//! Enable debug messages (0: no messages, 1: some messages, 2: all messages)
+#define DEBUG 0	//! Enable debug messages (0: no log output, 1: non-verbose logs, 2: verbose logs, 3: all logs)
 
 #define INPUT_FILE "inp.txt"
 #define OUTPUT_FILE_Q2A "q2a.txt"
@@ -145,7 +145,7 @@ __global__ void counterGlobalKernel(int *d_out, int *d_in, int n) {
 	}
 	__syncthreads();
 
-	#if DEBUG
+	#if DEBUG >= 2
 	if (gid == 0) {
 		printf("\t\tResult: [ ");
 		for (int i=0; i<RANGES_NUM; ++i) {
@@ -231,7 +231,7 @@ __global__ void counterSharedKernel(int *d_out, int *d_in, int n) {
 			atomicAdd(&d_out[i], d_shared[n+i]);
 		}
 
-		#if DEBUG
+		#if DEBUG >= 2
 		printf("\t\tResult: Block %d: [ ", blockIdx.x);
 		for (int i=0; i<RANGES_NUM; ++i) {
 			if (i == RANGES_NUM-1) {
@@ -252,14 +252,14 @@ __global__ void counterSharedKernel(int *d_out, int *d_in, int n) {
 __global__ void parallelScanSumKernel(int *d_in, int n) {
 	// Initialize global and thread IDs, and other variables
 	int gid = threadIdx.x + blockDim.x * blockIdx.x;
-	#if DEBUG >= 2
+	#if DEBUG >= 3
 	int tid = threadIdx.x;
 	#endif
 	int val = 0;
 
 	// Ensure we only access available array entries
 	if (gid < n) {
-		#if DEBUG >= 2
+		#if DEBUG >= 3
 		if (tid == 0) {
 			printf("\t\tIterations:\n\t\t\tBlock %d: d = %d: d_in = [ ",
 				   blockIdx.x, 0);
@@ -284,7 +284,7 @@ __global__ void parallelScanSumKernel(int *d_in, int n) {
 			}
 			__syncthreads();
 
-			#if DEBUG >= 2
+			#if DEBUG >= 3
 			if (tid == 0) {
 				printf("\t\t\tBlock %d: d = %d: d_in = [ ", blockIdx.x, d);
 				for (int i=0; i<n; ++i) {
@@ -298,7 +298,7 @@ __global__ void parallelScanSumKernel(int *d_in, int n) {
 			#endif
 		}
 
-		#if DEBUG
+		#if DEBUG >= 2
 		if (gid == n-1) {
 			printf("\t\tResult: [ ");
 			for (int i=0; i<n; ++i) {
@@ -370,7 +370,6 @@ std::vector<int> q2a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	cudaEventCreate(&stop);
 	
 	printf("\tCounting entries in global memory...\n");
-	cudaEventRecord(start, 0);
 	#endif
 
 	// Calculate the number of blocks and threads to use
@@ -381,6 +380,7 @@ std::vector<int> q2a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	printf("\tThreads per block: %d\n", threads_per_block);
 	printf("\tBlocks per grid: %d\n", blocks_per_grid);
 	printf("\tRunning kernel...\n");
+	cudaEventRecord(start, 0);
 	#endif
 
 	// Launch the kernel to find min
@@ -500,7 +500,6 @@ void q2b (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	cudaEventCreate(&stop);
 	
 	printf("\tCounting entries in shared memory...\n");
-	cudaEventRecord(start, 0);
 	#endif
 
 	// Calculate the number of blocks and threads to use
@@ -511,6 +510,7 @@ void q2b (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	printf("\tThreads per block: %d\n", threads_per_block);
 	printf("\tBlocks per grid: %d\n", blocks_per_grid);
 	printf("\tRunning kernel...\n");
+	cudaEventRecord(start, 0);
 	#endif
 
 	/* Launch the kernel to find min
@@ -625,7 +625,6 @@ void q2c (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	cudaEventCreate(&stop);
 	
 	printf("\tCounting entries using result from Q2 a...\n");
-	cudaEventRecord(start, 0);
 	#endif
 
 	// Calculate the number of blocks and threads to use
@@ -636,6 +635,7 @@ void q2c (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	printf("\tThreads per block: %d\n", threads_per_block);
 	printf("\tBlocks per grid: %d\n", blocks_per_grid);
 	printf("\tRunning kernel...\n");
+	cudaEventRecord(start, 0);
 	#endif
 
 	// Launch the kernel to find min
