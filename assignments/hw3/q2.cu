@@ -252,7 +252,9 @@ __global__ void counterSharedKernel(int *d_out, int *d_in, int n) {
 __global__ void parallelScanSumKernel(int *d_in, int n) {
 	// Initialize global and thread IDs, and other variables
 	int gid = threadIdx.x + blockDim.x * blockIdx.x;
+	#if DEBUG >= 2
 	int tid = threadIdx.x;
+	#endif
 	int val = 0;
 
 	// Ensure we only access available array entries
@@ -319,6 +321,7 @@ __global__ void parallelScanSumKernel(int *d_in, int n) {
  *
  * \param	v_in		Input array as a vector
  * \param	dev_props	CUDA device properties
+ * \return	Output vector with the contents of array B
  */
 std::vector<int> q2a (const std::vector<int> &v_in, cudaDeviceProp *dev_props) {
 	#if DEBUG
